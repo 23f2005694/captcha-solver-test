@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ethical CAPTCHA Lab — Generator & Verifier (with Test Solver)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --ink:#e5e7eb;
+      --muted:#9ca3af;
+      --accent:#22c55e;
+      --warn:#ef4444;
+      --focus:#60a5fa;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1000px 600px at 80% -10%, #193b77 0%, transparent 60%) no-repeat,
+                  radial-gradient(800px 500px at -10% 20%, #0e3b2e 0%, transparent 60%) no-repeat,
+                  var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .wrap{
+      max-width: 980px;
+      margin: 30px auto;
+      padding: 0 16px 40px;
+    }
+    header{
+      display:flex; align-items:center; gap:16px; margin-bottom:16px;
+    }
+    .badge{
+      padding:4px 10px; border-radius:999px; background:#0b2b53; color:#c7e1ff; font-size:12px; letter-spacing:.3px
+    }
+    h1{font-size: clamp(20px, 3.8vw, 32px); margin:4px 0}
+    p.sub{color:var(--muted); margin:0 0 8px 0}
+    .disclaimer{
+      border:1px solid #1f2937; background: #0b1220; color:#cbd5e1; padding:12px 14px; border-radius:10px; font-size:14px
+    }
+    .grid{
+      display:grid; grid-template-columns: 1.1fr 1fr; gap:18px; margin-top:16px
+    }
+    .panel{
+      background: var(--panel);
+      border:1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.02);
+    }
+    .controls{
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:6px
+    }
+    label{font-size:12px; color:#9fb3c7; display:block; margin-bottom:6px;}
+    select, input[type="number"], input[type="text"]{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2b3544; background:#0d1422; color:#e5e7eb;
+      outline:none
+    }
+    select:focus, input:focus{border-color: var(--focus); box-shadow: 0 0 0 3px rgba(96,165,250,.25)}
+    .canvasWrap{
+      border-radius: 12px; overflow:hidden; background:#0a0f1a; border:1px solid #1f2937; position:relative
+    }
+    canvas{display:block; width:100%; height:auto; background:#0a0f1a}
+    .row{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
+    button{
+      border:1px solid #2b3544; background:#0f1a2c; color:#e5e7eb; padding:10px 14px; border-radius:10px; cursor:pointer
+    }
+    button:hover{border-color:#3b485c; background:#12203a}
+    .primary{background:#0a2d17; border-color:#0f522b; color:#d1fae5}
+    .primary:hover{background:#0c3920; border-color:#157f41}
+    .ghost{background:transparent}
+    .success{color:#22c55e}
+    .error{color:#ef4444}
+    .muted{color:var(--muted)}
+    .status{min-height:22px; margin-top:6px}
+    .log{
+      height:180px; overflow:auto; background:#0b1220; border:1px solid #1f2937; border-radius:10px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; color:#cbd5e1
+    }
+    footer{margin-top:20px; color:#91a4b8; font-size:12px}
+    .code{
+      background:#0b1220; border:1px solid #1e293b; padding:8px 10px; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; color:#cbd5e1
+    }
+    .split{
+      display:grid; grid-template-columns: 1fr 1fr; gap:12px
+    }
+    @media (max-width: 900px){
+      .grid{grid-template-columns: 1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Ethical CAPTCHA Lab</h1>
+      <span class="badge">Generator + Verifier + Test Solver</span>
+    </header>
+    <p class="sub">Build and test your own CAPTCHA challenges for your applications. Includes an internal “auto-solve” button for developer testing only.</p>
+    <div class="disclaimer">
+      Important: This tool is for creating and validating CAPTCHA-style challenges that you own and control (e.g., for your website), and to test accessibility. It is not intended to bypass third‑party CAPTCHA protections. Do not use it to target services you do not own.
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2 style="margin:6px 0 2px 0; font-size:18px">1) Configure & Generate</h2>
+        <div class="controls">
+          <div>
+            <label for="type">Challenge type</label>
+            <select id="type">
+              - <option value="digits">Digits</option>
+              <option value="alnum" selected>Alphanumeric</option>
+              <option value="math">Math (e.g., 7 + 5)</option>
+            </select>
+          </div>
+          <div>
+            <label for="length">Length</label>
+            <input type="number" id="length" min="3" max="8" value="5" />
+          </div>
+          <div>
+            <label for="difficulty">Difficulty</label>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="primary" id="btnNew">New CAPTCHA</button>
+          <button id="btnNoise">Refresh Noise</button>
+          <button id="btnSpeak" title="Speak the challenge for accessibility">Speak</button>
+          <span class="muted" style="align-self:center">Audio uses your device's text-to-speech.</span>
+        </div>
+
+        <div class="canvasWrap" style="margin-top:12px">
+          <canvas id="captcha" width="740" height="220" aria-label="Generated CAPTCHA"></canvas>
+        </div>
+
+        <div class="split" style="margin-top:12px">
+          <div>
+            <label for="answer">Enter what you see (or the result for Math)</label>
+            <input type="text" id="answer" placeholder="Type your answer..." autocomplete="off" />
+            <div class="row">
+              <button class="primary" id="btnVerify">Verify</button>
+              <button class="ghost" id="btnClear">Clear</button>
+              <button id="btnAuto">Auto-solve (for testing)</button>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+          <div>
+            <label>Developer info</label>
+            <div class="log" id="log"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2 style="margin:6px 0 10px 0; font-size:18px">About this Lab</h2>
+        <p>This app demonstrates how to:</p>
+        <ul>
+          <li>Generate CAPTCHA-like challenges (digits, alphanumeric, or math).</li>
+          <li>Render with per-letter rotation, offsets, noise lines, dots, and subtle warps.</li>
+          <li>Verify user input client-side for demos (server validation recommended in production).</li>
+          <li>Offer an optional audio prompt via your browser's speech synthesis for accessibility.</li>
+        </ul>
+
+        <p class="muted">The “Auto-solve” button is only for testing your own challenges. It does not perform OCR. It reveals the known answer associated with the generated challenge so you can verify integration and UX flows.</p>
+
+        <div style="margin-top:10px">
+          <div class="code">Tip: Pair this front-end with server-side verification and rate limiting to prevent abuse.</div>
+        </div>
+
+        <footer>
+          MIT License. © 2025 Your Name
+        </footer>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Utility: seeded PRNG for reproducible noise
+    function mulberry32(a) {
+      return function() {
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    }
+    function randRange(rng, min, max){ return min + (max-min) * rng() }
+    function randInt(rng, min, max){ return Math.floor(randRange(rng, min, max+1)) }
+
+    const canvas = document.getElementById('captcha');
+    const ctx = canvas.getContext('2d');
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const answerEl = document.getElementById('answer');
+
+    const charsDigits = '0123456789';
+    const charsAlnum = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no i/l/1/O/0 for legibility
+
+    let currentChallenge = null;
+
+    function log(line){
+      const now = new Date().toLocaleTimeString();
+      logEl.textContent = `[${now}] ${line}\n` + logEl.textContent;
+    }
+
+    function genId(){
+      return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+    }
+
+    function pick(set, len, rng){
+      let out = '';
+      for(let i=0;i<len;i++) out += set[randInt(rng, 0, set.length-1)];
+      return out;
+    }
+
+    function generateChallenge(){
+      const type = document.getElementById('type').value;
+      const len = clamp(parseInt(document.getElementById('length').value || 5, 10), 3, 8);
+      const difficulty = document.getElementById('difficulty').value;
+      const id = genId();
+      const seed = Math.floor(Math.random()*0xffffffff);
+      let display = '';
+      let answer = '';
+
+      if(type === 'math'){
+        const rng = mulberry32(seed ^ 0xabc123);
+        const a = randInt(rng, 3, 19);
+        const b = randInt(rng, 2, 9);
+        const ops = ['+','-'];
+        const op = ops[randInt(rng, 0, ops.length-1)];
+        display = `${a} ${op} ${b}`;
+        answer = String(op === '+' ? a + b : a - b);
+      } else if(type === 'digits'){
+        const rng = mulberry32(seed ^ 0x5353);
+        answer = pick(charsDigits, len, rng);
+        display = answer;
+      } else {
+        const rng = mulberry32(seed ^ 0x777);
+        answer = pick(charsAlnum, len, rng);
+        display = answer;
+      }
+
+      currentChallenge = {
+        id, type, difficulty, display, answer, seed,
+        createdAt: Date.now()
+      };
+
+      drawCaptcha(currentChallenge);
+      status('');
+      answerEl.value = '';
+      log(`New challenge ${id} | type=${type} | difficulty=${difficulty} | display="${display}" | answer="${answer}"`);
+    }
+
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    function drawBackground(rng) {
+      const {width:w, height:h} = canvas;
+      const g = ctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0, '#061226');
+      g.addColorStop(1, '#0a0f1a');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+
+      // Subtle vignette
+      const vgrad = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)/6, w/2, h/2, Math.max(w,h));
+      vgrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vgrad.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx.fillStyle = vgrad;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    function drawNoise(rng, level='medium'){
+      const {width:w, height:h} = canvas;
+
+      // Wavy lines
+      const lines = level==='hard' ? 7 : level==='easy' ? 3 : 5;
+      for(let i=0;i<lines;i++){
+        ctx.beginPath();
+        const hue = randInt(rng, 180, 240);
+        ctx.strokeStyle = `hsla(${hue}, 60%, ${randInt(rng,40,65)}%, ${level==='hard'?0.35:0.25})`;
+        ctx.lineWidth = randRange(rng, 1.2, 2.6);
+        const cy = randRange(rng, h*0.2, h*0.8);
+        const amp = randRange(rng, 6, 18) * (level==='hard'?1.5:1);
+        const freq = randRange(rng, 0.006, 0.02);
+        ctx.moveTo(0, cy);
+        for(let x=0;x<=w;x+=3){
+          const y = cy + Math.sin(x*freq + i) * amp + Math.cos(x*freq*0.7 + i*2) * amp*0.3;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      // Speckle dots
+      const dots = level==='hard' ? 1000 : level==='easy' ? 350 : 700;
+      for(let i=0;i<dots;i++){
+        const x = randRange(rng, 0, w);
+        const y = randRange(rng, 0, h);
+        const a = randRange(rng, 0.05, 0.15);
+        const sz = randRange(rng, 0.5, 1.6);
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.fillRect(x, y, sz, sz);
+      }
+
+      // Random arcs
+      const arcs = level==='hard' ? 18 : level==='easy' ? 8 : 12;
+      for(let i=0;i<arcs;i++){
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(255,255,255,${randRange(rng, 0.04, 0.12)})`;
+        ctx.lineWidth = randRange(rng, 0.6, 1.2);
+        const cx = randRange(rng, -w*0.2, w*1.2);
+        const cy = randRange(rng, -h*0.2, h*1.2);
+        const r = randRange(rng, 10, Math.max(w,h)*0.7);
+        ctx.arc(cx, cy, r, randRange(rng, 0, Math.PI), randRange(rng, Math.PI, Math.PI*2), false);
+        ctx.stroke();
+      }
+
+      // Mild ripple warp
+      const img = ctx.getImageData(0,0,w,h);
+      const data = new Uint8ClampedArray(img.data);
+      const out = ctx.createImageData(w,h);
+      const outD = out.data;
+      const amp = level==='hard' ? 4.0 : level==='easy' ? 1.5 : 2.6;
+      const freq = level==='hard' ? 0.026 : level==='easy' ? 0.014 : 0.02;
+
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          const dx = Math.round(x + Math.sin(y*freq)*amp);
+          const dy = Math.round(y + Math.sin(x*freq*0.9)*amp*0.6);
+          const sx = clamp(dx, 0, w-1), sy = clamp(dy, 0, h-1);
+          const si = (sy*w+sx)*4;
+          const di = (y*w+x)*4;
+          outD[di]   = data[si];
+          outD[di+1] = data[si+1];
+          outD[di+2] = data[si+2];
+          outD[di+3] = data[si+3];
+        }
+      }
+      ctx.putImageData(out,0,0);
+    }
+
+    function drawText(chal){
+      const {width:w, height:h} = canvas;
+      const rng = mulberry32(chal.seed ^ 0x111222);
+      const difficulty = chal.difficulty;
+
+      // Base font size by length
+      const baseSize = Math.max(28, Math.min(90, Math.floor(680 / Math.max(chal.display.length, 4))));
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+
+      const colors = [
+        '#d1e9ff', '#ffd1f6', '#e8ffd1', '#ffe5b4', '#c7f9cc', '#bde0fe', '#f1f5f9'
+      ];
+
+      const xStart = w*0.08;
+      const xEnd = w*0.92;
+      const gap = (xEnd - xStart) / Math.max(chal.display.length, 1);
+
+      for(let i=0;i<chal.display.length;i++){
+        const c = chal.display[i];
+        const fontSize = baseSize + randRange(rng, -6, 12) * (difficulty==='hard'?1.4 : 1);
+        const weight = randInt(rng, 500, 900);
+        const fam = ['ui-rounded, system-ui, sans-serif','ui-sans-serif, system-ui','Segoe UI, system-ui','Roboto, system-ui'][randInt(rng, 0, 3)];
+        ctx.font = `${weight} ${fontSize}px ${fam}`;
+
+        const rot = (difficulty==='hard' ? randRange(rng, -0.6, 0.6) : difficulty==='easy' ? randRange(rng, -0.25, 0.25) : randRange(rng, -0.4, 0.4));
+        const jitterY = (difficulty==='hard' ? randRange(rng, -16, 16) : randRange(rng, -10, 10));
+        const x = xStart + i*gap + randRange(rng, -6, 6);
+        const y = h/2 + jitterY;
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+
+        // Shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        // Stroke + fill
+        ctx.lineWidth = difficulty==='hard' ? 2.2 : 1.8;
+        ctx.strokeStyle = 'rgba(20,20,40,0.9)';
+        ctx.fillStyle = colors[randInt(rng, 0, colors.length-1)];
+        ctx.strokeText(c, 0, 0);
+        ctx.fillText(c, 0, 0);
+
+        // Extra overlay lines through character
+        if (difficulty!=='easy' && Math.random() < 0.75){
+          ctx.shadowColor = 'transparent';
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-fontSize*0.6, randRange(rng,-4,4));
+          ctx.lineTo(fontSize*0.6, randRange(rng,-4,4));
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function drawCaptcha(chal){
+      const rng = mulberry32(chal.seed);
+      drawBackground(rng);
+
+      // Soft grid (subtle)
+      const {width:w, height:h} = canvas;
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.strokeStyle = '#93c5fd';
+      ctx.lineWidth = 1;
+      const step = 20;
+      for(let x=0;x<=w;x+=step){
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+      }
+      for(let y=0;y<=h;y+=step){
+        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+      }
+      ctx.restore();
+
+      drawText(chal);
+
+      // Overlay noise and warp
+      drawNoise(mulberry32(chal.seed ^ 0xdeadbeef), chal.difficulty);
+    }
+
+    function status(text, type){
+      statusEl.textContent = text||'';
+      statusEl.className = 'status ' + (type || '');
+    }
+
+    function verify(){
+      if(!currentChallenge){
+        status('Generate a challenge first.', 'error');
+        return;
+      }
+      const input = (answerEl.value || '').trim();
+      const expectedRaw = String(currentChallenge.answer);
+      const isCaseSensitive = currentChallenge.type === 'alnum';
+      const expected = isCaseSensitive ? expectedRaw : expectedRaw.toLowerCase();
+      const actual = isCaseSensitive ? input : input.toLowerCase();
+
+      if(actual && actual === expected){
+        status('Correct! ✅', 'success');
+        log(`✔ Challenge ${currentChallenge.id} validated`);
+      } else {
+        status('Incorrect. Try again. ❌', 'error');
+        log(`✖ Challenge ${currentChallenge.id} failed (entered="${input}", expected="${expectedRaw}")`);
+      }
+    }
+
+    function speakChallenge(){
+      if(!currentChallenge){
+        status('Generate a challenge first.', 'error'); return;
+      }
+      const u = new SpeechSynthesisUtterance();
+      u.rate = 0.95;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      if(currentChallenge.type === 'math'){
+        const spoken = currentChallenge.display.replace('*','times').replace('/','divided by');
+        u.text = `What is ${spoken}?`;
+      } else {
+        // spell out characters to avoid confusion
+        u.text = currentChallenge.display.split('').join(' ');
+      }
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      log('Spoke challenge via text-to-speech');
+    }
+
+    // Event bindings
+    document.getElementById('btnNew').addEventListener('click', generateChallenge);
+    document.getElementById('btnVerify').addEventListener('click', verify);
+    document.getElementById('btnClear').addEventListener('click', ()=>{ answerEl.value=''; status(''); });
+    document.getElementById('btnAuto').addEventListener('click', ()=>{
+      if(!currentChallenge){ status('Generate a challenge first.', 'error'); return; }
+      // Internal "solver": NOT OCR. For developer testing of your own challenges only.
+      answerEl.value = currentChallenge.answer;
+      status('Filled with the known answer for testing. Now click Verify.', '');
+      log(`Auto-filled answer for challenge ${currentChallenge.id}`);
+    });
+    document.getElementById('btnSpeak').addEventListener('click', speakChallenge);
+    document.getElementById('btnNoise').addEventListener('click', ()=>{
+      if(!currentChallenge){ status('Generate a challenge first.', 'error'); return; }
+      // Refresh only the noise by bumping seed and re-rendering
+      currentChallenge.seed = (currentChallenge.seed + randInt(mulberry32(currentChallenge.seed), 1, 0xffffff)) >>> 0;
+      drawCaptcha(currentChallenge);
+      log(`Refreshed noise for challenge ${currentChallenge.id}`);
+    });
+
+    // Generate an initial example on load
+    generateChallenge();
+  </script>
+</body>
+</html>
